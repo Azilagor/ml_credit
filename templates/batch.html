@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Batch Analysis — Credit Scoring</title>
+  <link rel="stylesheet" href="/static/css/styles.css"/>
+  <style>
+    .model-cmp-grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); margin-bottom:20px; }
+    .model-cmp-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius);
+                      padding:18px; box-shadow:var(--shadow); position:relative; }
+    .model-cmp-card.ensemble-card { border:2px solid var(--primary); background:#f0f5ff; }
+    .model-cmp-card .mc-name { font-size:13px; font-weight:700; color:var(--muted);
+                                text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; }
+    .model-cmp-card .mc-pd  { font-size:30px; font-weight:900; margin:0; }
+    .model-cmp-card .mc-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+    .model-cmp-card .mc-decisions { display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+    .mc-pill { font-size:11px; font-weight:700; padding:3px 9px;
+               border-radius:999px; white-space:nowrap; }
+    .mc-pill-green { background:#dcfae6; color:var(--success); }
+    .mc-pill-red   { background:#fee4e2; color:var(--danger); }
+    .mc-pill-yellow{ background:#fef0c7; color:var(--warning); }
+    .mc-star { position:absolute; top:12px; right:14px; font-size:18px; }
+
+    /* comparison table */
+    .cmp-table th, .cmp-table td { padding:11px 14px; }
+    .cmp-table .bar-cell { min-width:180px; }
+    .bar-wrap { display:flex; align-items:center; gap:8px; }
+    .bar-track { flex:1; height:10px; background:#e4e7ec; border-radius:999px; overflow:hidden; }
+    .bar-fill  { height:100%; border-radius:999px; }
+    .bar-blue  { background:var(--primary); }
+    .bar-green { background:#47cd89; }
+    .bar-red   { background:#f97066; }
+    .bar-yellow{ background:#fec84b; }
+    .bar-label { font-size:12px; font-weight:700; min-width:38px; text-align:right; }
+
+    /* risk distribution */
+    .risk-dist { display:flex; gap:0; border-radius:8px; overflow:hidden; height:28px; margin-top:8px; }
+    .risk-dist-seg { display:flex; align-items:center; justify-content:center;
+                     font-size:11px; font-weight:700; color:#fff; transition:width .4s; }
+    .rds-low    { background:#47cd89; }
+    .rds-medium { background:#fec84b; color:#344054; }
+    .rds-high   { background:#f97066; }
+
+    /* history table improvement */
+    .hist-model-pills { display:flex; gap:4px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  {{ sidebar | safe }}
+  <main class="main">
+    <div class="topbar">
+      <div><h1>Batch CSV Analysis</h1>
+           <p>Upload a dataset — all 4 ML models score every record. Compare their decisions side by side.</p></div>
+      <div class="user-badge">{{ user.full_name }}</div>
+    </div>
+
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+    <!-- UPLOAD FORM -->
+    <div class="card" style="margin-bottom:20px;">
+      <h3>Upload Dataset</h3>
+      <div class="grid grid-2" style="gap:20px;align-items:start;">
+        <form method="post" action="/batch/upload" enctype="multipart/form-data" class="form">
+          <div class="upload-zone">
+            <p style="font-size:36px;margin:0;">📂</p>
+            <p style="margin:8px 0 4px;"><strong>Select CSV file</strong></p>
+            <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">
+              Required columns: monthly_income, existing_debt, loan_amount, loan_term,
+              employment_status, employment_years, age, credit_history_score,
+              previous_delays, loan_purpose
+            </p>
+            <input type="file" name="file" accept=".csv" required/>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">🚀 Start Batch Analysis</button>
+        </form>
+        <div>
+          <p class="card-subtitle">How it works:</p>
+          <ul style="color:var(--text);font-size:14px;line-height:1.9;padding-left:20px;margin:0 0 16px;">
+            <li>Each row in your CSV = one credit application</li>
+            <li>All <strong>4 ML models</strong> score every record independently</li>
+            <li>Results are aggregated per model: avg PD, approval rate, risk distribution, ECL</li>
+            <li>Ensemble = average PD across all models (most reliable)</li>
+          </ul>
+          <a href="/batch/template" class="btn btn-light btn-sm">⬇ Download CSV Template</a>
+        </div>
+      </div>
+    </div>
+
+    {% if batch_result and model_stats %}
+    {% set total = batch_result.total_records %}
+
+    <!-- OVERVIEW STATS -->
+    <div class="grid grid-4" style="margin-bottom:20px;">
+      <div class="card stat">
+        <span class="label">Total Records</span>
+        <span class="value">{{ total }}</span>
+      </div>
+      <div class="card stat">
+        <span class="label">Approved (Ensemble)</span>
+        <span class="value" style="color:var(--success);">{{ batch_result.approved_count }}</span>
+      </div>
+      <div class="card stat">
+        <span class="label">Rejected (Ensemble)</span>
+        <span class="value" style="color:var(--danger);">{{ batch_result.rejected_count }}</span>
+      </div>
+      <div class="card stat">
+        <span class="label">Manual Review</span>
+        <span class="value" style="color:var(--warning);">{{ batch_result.manual_review_count }}</span>
+      </div>
+    </div>
+
+    <!-- MODEL CARDS -->
+    <div class="card" style="margin-bottom:20px;">
+      <h3>Model-by-Model Overview</h3>
+      <p class="card-subtitle">Each card shows how a particular model assessed the entire dataset of {{ total }} records.</p>
+      <div class="model-cmp-grid">
+        {% for mkey, m in model_stats.items() %}
+        <div class="model-cmp-card {% if mkey == 'ensemble' %}ensemble-card{% endif %}">
+          {% if mkey == 'ensemble' %}<span class="mc-star">⭐</span>{% endif %}
+          <div class="mc-name">{{ m.display_name }}</div>
+          <p class="mc-pd" style="color:{% if m.avg_pd < 30 %}var(--success){% elif m.avg_pd < 60 %}var(--warning){% else %}var(--danger){% endif %};">
+            {{ m.avg_pd }}%
+          </p>
+          <div class="mc-sub">Average probability of default</div>
+          <div class="mc-decisions">
+            <span class="mc-pill mc-pill-green">✓ {{ m.approved }} approved</span>
+            <span class="mc-pill mc-pill-red">✗ {{ m.rejected }} rejected</span>
+            <span class="mc-pill mc-pill-yellow">⚠ {{ m.manual }} review</span>
+          </div>
+          <div style="margin-top:12px;">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Risk distribution</div>
+            <div class="risk-dist">
+              {% set lp = (m.low / total * 100)|round(0)|int %}
+              {% set mp = (m.medium / total * 100)|round(0)|int %}
+              {% set hp = (m.high / total * 100)|round(0)|int %}
+              {% if lp > 0 %}<div class="risk-dist-seg rds-low" style="width:{{ lp }}%;" title="Low: {{ m.low }}">{% if lp > 8 %}{{ lp }}%{% endif %}</div>{% endif %}
+              {% if mp > 0 %}<div class="risk-dist-seg rds-medium" style="width:{{ mp }}%;" title="Medium: {{ m.medium }}">{% if mp > 8 %}{{ mp }}%{% endif %}</div>{% endif %}
+              {% if hp > 0 %}<div class="risk-dist-seg rds-high" style="width:{{ hp }}%;" title="High: {{ m.high }}">{% if hp > 8 %}{{ hp }}%{% endif %}</div>{% endif %}
+            </div>
+            <div style="display:flex;gap:10px;margin-top:4px;font-size:11px;color:var(--muted);">
+              <span>🟢 Low: {{ m.low }}</span>
+              <span>🟡 Med: {{ m.medium }}</span>
+              <span>🔴 High: {{ m.high }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- DETAILED COMPARISON TABLE -->
+    <div class="card" style="margin-bottom:20px;">
+      <h3>Detailed Model Comparison</h3>
+      <p class="card-subtitle">Side-by-side metrics for all models on the uploaded dataset ({{ total }} records).</p>
+      <div class="model-table-wrap">
+        <table class="model-table cmp-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Avg PD</th>
+              <th class="bar-cell">Approval Rate</th>
+              <th class="bar-cell">Rejection Rate</th>
+              <th>Avg ECL (₸)</th>
+              <th>Low Risk</th>
+              <th>Med Risk</th>
+              <th>High Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for mkey, m in model_stats.items() %}
+          <tr {% if mkey == 'ensemble' %}class="ensemble-row"{% endif %}>
+            <td>
+              {{ m.display_name }}
+              {% if mkey == 'ensemble' %}<span style="font-size:11px;color:var(--primary);"> ★ Ensemble</span>{% endif %}
+            </td>
+            <td>
+              <strong style="color:{% if m.avg_pd < 30 %}var(--success){% elif m.avg_pd < 60 %}var(--warning){% else %}var(--danger){% endif %};">
+                {{ m.avg_pd }}%
+              </strong>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track">
+                  <div class="bar-fill bar-green" style="width:{{ m.approval_rate }}%;"></div>
+                </div>
+                <span class="bar-label" style="color:var(--success);">{{ m.approval_rate }}%</span>
+              </div>
+            </td>
+            <td class="bar-cell">
+              <div class="bar-wrap">
+                <div class="bar-track">
+                  <div class="bar-fill bar-red" style="width:{{ m.rejection_rate }}%;"></div>
+                </div>
+                <span class="bar-label" style="color:var(--danger);">{{ m.rejection_rate }}%</span>
+              </div>
+            </td>
+            <td>₸ {{ "{:,.0f}".format(m.avg_ecl) }}</td>
+            <td style="color:var(--success);">{{ m.low }}</td>
+            <td style="color:var(--warning);">{{ m.medium }}</td>
+            <td style="color:var(--danger);">{{ m.high }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- VISUAL BAR COMPARISON: Avg PD per model -->
+      <div style="margin-top:24px;">
+        <h4 style="margin:0 0 14px;font-size:15px;">Average PD by Model</h4>
+        <div style="display:grid;gap:10px;">
+          {% for mkey, m in model_stats.items() %}
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+              <span style="font-weight:{% if mkey == 'ensemble' %}800{% else %}500{% endif %};">{{ m.display_name }}</span>
+              <span style="font-weight:700;color:{% if m.avg_pd < 30 %}var(--success){% elif m.avg_pd < 60 %}var(--warning){% else %}var(--danger){% endif %};">{{ m.avg_pd }}%</span>
+            </div>
+            <div style="height:12px;background:#e4e7ec;border-radius:999px;overflow:hidden;">
+              <div style="height:100%;width:{{ m.avg_pd }}%;border-radius:999px;
+                background:{% if m.avg_pd < 30 %}#47cd89{% elif m.avg_pd < 60 %}#fec84b{% else %}#f97066{% endif %};transition:width .5s;"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {% endif %}
+
+    <!-- HISTORY -->
+    <div class="card">
+      <h3>Batch Analysis History</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>File</th><th>Date</th><th>Records</th>
+              <th>Approved</th><th>Rejected</th><th>Manual</th><th>Avg PD</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% if history %}
+          {% for b in history %}
+          <tr>
+            <td>{{ b.id }}</td>
+            <td style="font-size:13px;">{{ b.filename }}</td>
+            <td style="font-size:13px;">{{ b.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+            <td><strong>{{ b.total_records }}</strong></td>
+            <td style="color:var(--success);">{{ b.approved_count }}</td>
+            <td style="color:var(--danger);">{{ b.rejected_count }}</td>
+            <td style="color:var(--warning);">{{ b.manual_review_count }}</td>
+            <td>
+              <span style="font-weight:700;color:{% if b.avg_pd < 0.3 %}var(--success){% elif b.avg_pd < 0.6 %}var(--warning){% else %}var(--danger){% endif %};">
+                {{ "%.1f"|format(b.avg_pd * 100) }}%
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px;">No batch analyses yet.</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+</body></html>

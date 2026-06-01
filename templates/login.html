@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Login — Credit Scoring</title>
+  <link rel="stylesheet" href="/static/css/styles.css"/>
+</head>
+<body class="auth-page">
+<main class="auth-card">
+  <div class="auth-brand">
+    <h1>Credit Scoring</h1>
+    <p>ML-powered creditworthiness assessment system</p>
+  </div>
+  {% if error %}
+  <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/login" class="form">
+    <div class="form-row"><label>Email</label>
+      <input type="email" name="email" required placeholder="user@example.com" value="{{ email or '' }}"/></div>
+    <div class="form-row"><label>Password</label>
+      <input type="password" name="password" required placeholder="Password"/></div>
+    <button class="btn btn-primary btn-block" type="submit">Login</button>
+    <a class="btn btn-light btn-block" href="/register">Create account</a>
+  </form>
+  <p style="margin-top:20px;font-size:13px;color:var(--muted);text-align:center;">
+    Demo: admin@example.com / admin123 &nbsp;|&nbsp; user@example.com / user123
+  </p>
+</main>
+</body></html>

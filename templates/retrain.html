@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Retrain — Credit Scoring</title>
+<link rel="stylesheet" href="/static/css/styles.css"/></head>
+<body class="auth-page">
+<div class="auth-card">
+  <div class="auth-brand"><h1>✅ Models Retrained</h1>
+  <p>All 4 ML models have been retrained successfully.</p></div>
+  {% for name, m in meta.items() %}
+  <div style="margin:8px 0;font-size:14px;"><strong>{{ name }}</strong> — AUC: {{ m.auc }} | Acc: {{ m.accuracy }}</div>
+  {% endfor %}
+  <a href="/admin" class="btn btn-primary btn-block" style="margin-top:20px;">Back to Admin</a>
+</div>
+</body></html>

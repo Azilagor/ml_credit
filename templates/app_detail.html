@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Application #{{ app.id }} — Credit Scoring</title>
+  <link rel="stylesheet" href="/static/css/styles.css"/>
+</head>
+<body>
+<div class="app-shell">
+  {{ sidebar | safe }}
+  <main class="main">
+    <div class="topbar">
+      <div><h1>Application #{{ app.id }}</h1>
+           <p>Submitted {{ app.created_at.strftime("%d %B %Y, %H:%M") }}</p></div>
+      <div class="user-badge">{{ user.full_name }}</div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:18px;">
+      <div class="card">
+        <h3>Application Details</h3>
+        <table style="width:100%;font-size:14px;">
+          <tr><td style="color:var(--muted);padding:6px 0;">Age</td><td><strong>{{ app.age }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Monthly Income</td><td><strong>₸ {{ "{:,.0f}".format(app.monthly_income) }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Existing Debt</td><td><strong>₸ {{ "{:,.0f}".format(app.existing_debt) }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Loan Amount</td><td><strong>₸ {{ "{:,.0f}".format(app.loan_amount) }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Loan Term</td><td><strong>{{ app.loan_term }} months</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Employment</td><td><strong>{{ app.employment_status }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Employment Years</td><td><strong>{{ app.employment_years }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Credit Score</td><td><strong>{{ app.credit_history_score }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Payment Delays</td><td><strong>{{ app.previous_delays }}</strong></td></tr>
+          <tr><td style="color:var(--muted);padding:6px 0;">Loan Purpose</td><td><strong>{{ app.loan_purpose }}</strong></td></tr>
+        </table>
+      </div>
+      {% if predictions %}
+      {% set ens = predictions|selectattr("model_name","eq","ensemble")|list %}
+      {% set ens_p = ens[0] if ens else predictions[0] %}
+      <div>
+        {% set dec = ens_p.decision %}
+        {% set dec_class = "approved" if dec == "Approved" else ("rejected" if dec == "Rejected" else "manual") %}
+        <div class="decision-banner {{ dec_class }}" style="margin-bottom:14px;">
+          <h2>{% if dec == "Approved" %}✅ Approved{% elif dec == "Rejected" %}❌ Rejected{% else %}⚠️ Manual Review{% endif %}</h2>
+          <p>Ensemble PD: <strong>{{ "%.1f"|format(ens_p.probability_default * 100) }}%</strong></p>
+        </div>
+        <div class="risk-indicator-grid">
+          <div class="risk-card"><div class="risk-label">Prob. Default</div>
+            <div class="risk-value" style="color:{% if ens_p.probability_default < 0.3 %}var(--success){% elif ens_p.probability_default < 0.6 %}var(--warning){% else %}var(--danger){% endif %};">
+              {{ "%.1f"|format(ens_p.probability_default*100) }}%</div></div>
+          <div class="risk-card"><div class="risk-label">Delinquency Risk</div>
+            <div class="risk-value">{{ "%.1f"|format(ens_p.probability_delinquency*100) }}%</div></div>
+          <div class="risk-card"><div class="risk-label">Risk Level</div>
+            <div class="risk-value"><span class="badge badge-{{ ens_p.risk_level }}">{{ ens_p.risk_level }}</span></div></div>
+          <div class="risk-card"><div class="risk-label">Expected Credit Loss</div>
+            <div class="risk-value" style="font-size:16px;">₸ {{ "{:,.0f}".format(ens_p.expected_credit_loss) }}</div></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if predictions %}
+    <div class="card" style="margin-bottom:18px;">
+      <h3>Model Comparison</h3>
+      <div class="model-table-wrap">
+        <table class="model-table">
+          <thead><tr><th>Model</th><th>PD %</th><th>Delinquency %</th><th>Risk</th><th>ECL (₸)</th><th>Decision</th></tr></thead>
+          <tbody>
+          {% for p in predictions %}
+          <tr {% if p.model_name == "ensemble" %}class="ensemble-row"{% endif %}>
+            <td>{{ p.model_name | replace("_"," ") | title }}{% if p.model_name == "ensemble" %} ★{% endif %}</td>
+            <td>{{ "%.1f"|format(p.probability_default*100) }}%</td>
+            <td>{{ "%.1f"|format(p.probability_delinquency*100) }}%</td>
+            <td><span class="badge badge-{{ p.risk_level }}">{{ p.risk_level }}</span></td>
+            <td>{{ "{:,.0f}".format(p.expected_credit_loss) }}</td>
+            <td><span class="badge badge-{{ p.decision.split()[0] }}">{{ p.decision }}</span></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- EXPLANATIONS -->
+    {% if explanations %}
+    <div class="card" style="margin-bottom:18px;">
+      <h3>Key Risk Factors</h3>
+      <div class="feature-bar-wrap">
+        {% for ex in explanations %}
+        <div class="feature-bar-item">
+          <div class="feature-bar-label">
+            <span class="fn">{{ ex.feature_human }}</span>
+            <span class="fv">{% if ex.effect_direction == "increases_risk" %}⬆ Increases risk{% else %}✓ Reduces risk{% endif %}</span>
+          </div>
+          <div class="feature-bar-track">
+            <div class="feature-bar-fill {% if ex.effect_direction == 'increases_risk' %}fill-risk{% else %}fill-safe{% endif %}"
+                 style="width:{{ [ex.importance_value * 400, 100]|min }}%;"></div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">{{ ex.explanation_text }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- RECOMMENDATIONS -->
+    {% if recommendations %}
+    <div class="card">
+      <h3>Recommendations for Improvement</h3>
+      <ul class="rec-list">{% for r in recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <a href="/dashboard" class="btn btn-light" style="margin-top:16px;">← Back to Dashboard</a>
+  </main>
+</div>
+</body></html>

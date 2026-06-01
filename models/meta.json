@@ -1,0 +1,18 @@
+{
+  "logistic_regression": {
+    "auc": 0.9684,
+    "accuracy": 0.985
+  },
+  "random_forest": {
+    "auc": 0.9647,
+    "accuracy": 0.985
+  },
+  "gradient_boosting": {
+    "auc": 0.9679,
+    "accuracy": 0.98
+  },
+  "neural_network": {
+    "auc": 0.5734,
+    "accuracy": 0.985
+  }
+}

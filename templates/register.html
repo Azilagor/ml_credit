@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Register — Credit Scoring</title>
+  <link rel="stylesheet" href="/static/css/styles.css"/>
+</head>
+<body class="auth-page">
+<main class="auth-card">
+  <div class="auth-brand">
+    <h1>Create Account</h1>
+    <p>Register to submit credit applications.</p>
+  </div>
+  {% if error %}
+  <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/register" class="form">
+    <div class="form-row"><label>Full Name</label>
+      <input name="full_name" required placeholder="Your full name" value="{{ full_name or '' }}"/></div>
+    <div class="form-row"><label>Email</label>
+      <input type="email" name="email" required placeholder="user@example.com" value="{{ email or '' }}"/></div>
+    <div class="form-row"><label>Password</label>
+      <input type="password" name="password" required placeholder="Min. 6 characters"/></div>
+    <button class="btn btn-primary btn-block" type="submit">Register</button>
+    <a class="btn btn-light btn-block" href="/login">Already have an account</a>
+  </form>
+</main>
+</body></html>

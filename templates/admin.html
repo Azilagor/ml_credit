@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin — Credit Scoring</title>
+  <link rel="stylesheet" href="/static/css/styles.css"/>
+</head>
+<body>
+<div class="app-shell">
+  {{ sidebar | safe }}
+  <main class="main">
+    <div class="topbar">
+      <div><h1>Admin Dashboard</h1><p>System statistics, all applications, and user management.</p></div>
+      <div class="user-badge">{{ user.full_name }} (ADMIN)</div>
+    </div>
+
+    <!-- STATS -->
+    <div class="grid grid-4" style="margin-bottom:18px;">
+      <div class="card stat"><span class="label">Total Users</span><span class="value">{{ stats.total_users }}</span></div>
+      <div class="card stat"><span class="label">Total Applications</span><span class="value">{{ stats.total_apps }}</span></div>
+      <div class="card stat"><span class="label">Approved</span><span class="value" style="color:var(--success);">{{ stats.approved }}</span></div>
+      <div class="card stat"><span class="label">Rejected</span><span class="value" style="color:var(--danger);">{{ stats.rejected }}</span></div>
+      <div class="card stat"><span class="label">Manual Review</span><span class="value" style="color:var(--warning);">{{ stats.manual }}</span></div>
+      <div class="card stat"><span class="label">Avg PD</span><span class="value">{{ "%.1f"|format(stats.avg_pd * 100) if stats.avg_pd else "0.0" }}%</span></div>
+      <div class="card stat"><span class="label">Batch Analyses</span><span class="value">{{ stats.total_batches }}</span></div>
+      <div class="card stat"><span class="label">Approval Rate</span><span class="value">{{ "%.0f"|format(stats.approval_rate) }}%</span></div>
+    </div>
+
+    <!-- MODEL META -->
+    {% if model_meta %}
+    <div class="card" style="margin-bottom:18px;">
+      <h3>Trained Model Performance</h3>
+      <div class="model-table-wrap">
+        <table class="model-table">
+          <thead><tr><th>Model</th><th>AUC-ROC</th><th>Accuracy</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for name, m in model_meta.items() %}
+          <tr>
+            <td>{{ name | replace("_"," ") | title }}</td>
+            <td><strong>{{ m.auc }}</strong></td>
+            <td>{{ m.accuracy }}</td>
+            <td><span class="badge badge-Approved">Active</span></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ALL APPLICATIONS -->
+    <div class="card" style="margin-bottom:18px;">
+      <h3>All Applications</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>User</th><th>Date</th><th>Loan Amount</th><th>Decision</th><th>Avg PD</th><th>View</th></tr></thead>
+          <tbody>
+          {% for app in applications %}
+          <tr>
+            <td>{{ app.id }}</td>
+            <td>{{ app.user.full_name if app.user else "—" }}</td>
+            <td>{{ app.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+            <td>₸ {{ "{:,.0f}".format(app.loan_amount) }}</td>
+            <td>
+              {% if app.predictions %}
+              {% set ens = app.predictions|selectattr("model_name","eq","ensemble")|list %}
+              {% set p = ens[0] if ens else app.predictions[0] %}
+              <span class="badge badge-{{ p.decision.split()[0] }}">{{ p.decision }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if app.predictions %}
+              {% set ens = app.predictions|selectattr("model_name","eq","ensemble")|list %}
+              {% set p = ens[0] if ens else app.predictions[0] %}
+              {{ "%.1f"|format(p.probability_default*100) }}%
+              {% else %}—{% endif %}
+            </td>
+            <td><a href="/applications/{{ app.id }}" class="btn btn-sm btn-light">View</a></td>
+          </tr>
+          {% endfor %}
+          {% if not applications %}
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No applications yet.</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="card">
+      <h3>Users</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Registered</th><th>Applications</th></tr></thead>
+          <tbody>
+          {% for u in users %}
+          <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.full_name }}</td>
+            <td>{{ u.email }}</td>
+            <td><span class="badge {% if u.role == 'ADMIN' %}badge-Manual{% else %}badge-Approved{% endif %}">{{ u.role }}</span></td>
+            <td>{{ u.created_at.strftime("%d.%m.%Y") }}</td>
+            <td>{{ u.applications|length }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RETRAIN -->
+    <form method="post" action="/admin/retrain" style="margin-top:18px;">
+      <button class="btn btn-primary" type="submit">🔄 Retrain All Models</button>
+    </form>
+  </main>
+</div>
+</body></html>

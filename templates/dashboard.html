@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Dashboard — Credit Scoring</title>
+  <link rel="stylesheet" href="/static/css/styles.css"/>
+</head>
+<body>
+<div class="app-shell">
+  {{ sidebar | safe }}
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1>Credit Application</h1>
+        <p>Fill in the questionnaire below to receive an ML-powered creditworthiness assessment.</p>
+      </div>
+      <div class="user-badge">{{ user.full_name }} ({{ user.role }})</div>
+    </div>
+
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+    <div class="grid grid-2">
+      <!-- APPLICATION FORM -->
+      <div class="card">
+        <h3>New Credit Application</h3>
+        <p class="card-subtitle">Please answer all questions honestly for the most accurate assessment.</p>
+        <form method="post" action="/applications" class="form">
+
+          <div class="form-section-title">Personal Information</div>
+          <div class="form-row"><label>Your Age</label>
+            <input type="number" name="age" min="18" max="80" required placeholder="e.g. 32"/></div>
+          <div class="form-row"><label>Monthly Income (₸)</label>
+            <input type="number" name="monthly_income" min="0" required placeholder="e.g. 250000"/></div>
+
+          <div class="form-section-title">Employment</div>
+          <div class="form-row"><label>Employment Status</label>
+            <select name="employment_status" required>
+              <option value="">Select...</option>
+              <option value="employed">Employed (full-time)</option>
+              <option value="self-employed">Self-employed</option>
+              <option value="part-time">Part-time employment</option>
+              <option value="unemployed">Unemployed</option>
+              <option value="retired">Retired</option>
+              <option value="student">Student</option>
+            </select></div>
+          <div class="form-row"><label>Years at Current Job</label>
+            <input type="number" name="employment_years" min="0" max="50" step="0.5" required placeholder="e.g. 3.5"/></div>
+
+          <div class="form-section-title">Credit History</div>
+          <div class="form-row"><label>Credit History Score (300–850)</label>
+            <input type="number" name="credit_history_score" min="300" max="850" required placeholder="e.g. 680"/></div>
+          <div class="form-row"><label>Number of Previous Payment Delays</label>
+            <input type="number" name="previous_delays" min="0" max="20" required placeholder="e.g. 0"/></div>
+          <div class="form-row"><label>Existing Monthly Debt Payments (₸)</label>
+            <input type="number" name="existing_debt" min="0" required placeholder="e.g. 50000"/></div>
+
+          <div class="form-section-title">Loan Details</div>
+          <div class="form-row"><label>Loan Amount Requested (₸)</label>
+            <input type="number" name="loan_amount" min="0" required placeholder="e.g. 1000000"/></div>
+          <div class="form-row"><label>Loan Term (months)</label>
+            <select name="loan_term" required>
+              <option value="6">6 months</option>
+              <option value="12" selected>12 months</option>
+              <option value="24">24 months</option>
+              <option value="36">36 months</option>
+              <option value="48">48 months</option>
+              <option value="60">60 months</option>
+            </select></div>
+          <div class="form-row"><label>Loan Purpose</label>
+            <select name="loan_purpose" required>
+              <option value="personal">Personal needs</option>
+              <option value="business">Business development</option>
+              <option value="education">Education</option>
+              <option value="mortgage">Mortgage / Real estate</option>
+              <option value="auto">Auto loan</option>
+              <option value="medical">Medical expenses</option>
+              <option value="other">Other</option>
+            </select></div>
+
+          <button class="btn btn-primary btn-block" type="submit" style="margin-top:8px;">
+            🔍 Evaluate Creditworthiness
+          </button>
+        </form>
+      </div>
+
+      <!-- RESULT -->
+      <div>
+        {% if result %}
+        {% set ens = result.ensemble %}
+        {% set dec = ens.decision %}
+        {% set dec_class = "approved" if dec == "Approved" else ("rejected" if dec == "Rejected" else "manual") %}
+        <div class="decision-banner {{ dec_class }}">
+          <h2>
+            {% if dec == "Approved" %}✅ Application Approved{% elif dec == "Rejected" %}❌ Application Rejected{% else %}⚠️ Manual Review Required{% endif %}
+          </h2>
+          <p>Based on ensemble analysis of 4 ML models. Ensemble probability of default: <strong>{{ "%.1f"|format(ens.probability_default * 100) }}%</strong></p>
+        </div>
+
+        <!-- RISK INDICATORS -->
+        <div class="card" style="margin-bottom:18px;">
+          <h3>Risk Indicators</h3>
+          <div class="risk-indicator-grid">
+            <div class="risk-card">
+              <div class="risk-label">Probability of Default</div>
+              <div class="risk-value" style="color:{% if ens.probability_default < 0.3 %}var(--success){% elif ens.probability_default < 0.6 %}var(--warning){% else %}var(--danger){% endif %};">
+                {{ "%.1f"|format(ens.probability_default * 100) }}%</div>
+            </div>
+            <div class="risk-card">
+              <div class="risk-label">Delinquency Risk</div>
+              <div class="risk-value" style="color:var(--warning);">
+                {{ "%.1f"|format(ens.probability_delinquency * 100) }}%</div>
+            </div>
+            <div class="risk-card">
+              <div class="risk-label">Risk Level</div>
+              <div class="risk-value"><span class="badge badge-{{ ens.risk_level }}">{{ ens.risk_level }}</span></div>
+            </div>
+            <div class="risk-card">
+              <div class="risk-label">Expected Credit Loss</div>
+              <div class="risk-value" style="font-size:16px;">₸ {{ "{:,.0f}".format(ens.expected_credit_loss) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODEL COMPARISON -->
+        <div class="card" style="margin-bottom:18px;">
+          <h3>Model Comparison</h3>
+          <p class="card-subtitle">Results from all 4 ML models + ensemble.</p>
+          <div class="model-table-wrap">
+            <table class="model-table">
+              <thead><tr>
+                <th>Model</th><th>PD %</th><th>Risk Level</th><th>ECL (₸)</th><th>Decision</th>
+              </tr></thead>
+              <tbody>
+              {% for key, m in result.items() %}
+              <tr {% if key == "ensemble" %}class="ensemble-row"{% endif %}>
+                <td>{{ m.display_name }}</td>
+                <td>{{ "%.1f"|format(m.probability_default * 100) }}%</td>
+                <td><span class="badge badge-{{ m.risk_level }}">{{ m.risk_level }}</span></td>
+                <td>{{ "{:,.0f}".format(m.expected_credit_loss) }}</td>
+                <td><span class="badge badge-{{ m.decision.split()[0] }}">{{ m.decision }}</span></td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- FEATURE IMPORTANCE -->
+        {% if explanations %}
+        <div class="card" style="margin-bottom:18px;">
+          <h3>Key Factors</h3>
+          <p class="card-subtitle">Top factors influencing the decision.</p>
+          <div class="feature-bar-wrap">
+            {% for ex in explanations %}
+            <div class="feature-bar-item">
+              <div class="feature-bar-label">
+                <span class="fn">{{ ex.feature_human }}</span>
+                <span class="fv">
+                  {% if ex.effect_direction == "increases_risk" %}⬆ Risk{% else %}✓ Safe{% endif %}
+                </span>
+              </div>
+              <div class="feature-bar-track">
+                <div class="feature-bar-fill {% if ex.effect_direction == 'increases_risk' %}fill-risk{% else %}fill-safe{% endif %}"
+                     style="width:{{ [ex.importance_value * 400, 100]|min }}%;"></div>
+              </div>
+              <div style="font-size:12px;color:var(--muted);">{{ ex.explanation_text }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- RECOMMENDATIONS -->
+        {% if recommendations %}
+        <div class="card">
+          <h3>Recommendations</h3>
+          <p class="card-subtitle">Steps to improve your creditworthiness:</p>
+          <ul class="rec-list">
+            {% for r in recommendations %}<li>{{ r }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="card" style="text-align:center;padding:40px;">
+          <p style="font-size:32px;margin:0;">📋</p>
+          <h3 style="margin:12px 0 8px;">Submit Your Application</h3>
+          <p style="color:var(--muted);">Fill in the form on the left and click <strong>Evaluate Creditworthiness</strong> to receive your full ML assessment with model comparison, risk indicators, and personalised recommendations.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="card" style="margin-top:20px;">
+      <h3>Application History</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Date</th><th>Loan Amount</th><th>Loan Term</th><th>Decision</th><th>Avg PD</th><th>Details</th></tr></thead>
+          <tbody>
+          {% if applications %}
+          {% for app in applications %}
+          <tr>
+            <td>{{ app.id }}</td>
+            <td>{{ app.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+            <td>₸ {{ "{:,.0f}".format(app.loan_amount) }}</td>
+            <td>{{ app.loan_term }} mo.</td>
+            <td>
+              {% if app.predictions %}
+              {% set avg_pd = app.predictions|map(attribute='probability_default')|list|sum / app.predictions|length %}
+              <span class="badge badge-{{ app.predictions[0].decision.split()[0] }}">{{ app.predictions[0].decision }}</span>
+              {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+            </td>
+            <td>
+              {% if app.predictions %}
+              {{ "%.1f"|format(avg_pd * 100) }}%
+              {% else %}—{% endif %}
+            </td>
+            <td><a href="/applications/{{ app.id }}" class="btn btn-sm btn-light">View</a></td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No applications yet.</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+</body></html>
