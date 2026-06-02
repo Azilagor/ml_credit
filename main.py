@@ -679,7 +679,90 @@ def seed():
         train_and_save_models()
     else:
         print("[Seed] Models already exist, skipping training.")
+    
+    # Create sample applications for demo user (if none exist)
+    db = SessionLocal()
+    try:
+      demo = db.query(User).filter(User.email == "user@example.com").first()
+      if demo:
+        existing = db.query(CreditApplication).filter(CreditApplication.user_id == demo.id).count()
+        # Ensure there are at least 10 demo applications; add missing ones
+        to_create = max(0, 10 - int(existing))
+        if to_create > 0:
+          print("[Seed] Creating 10 demo applications...")
+          models = get_models()
+          samples = [
+            {"monthly_income":250000,"existing_debt":10000,"loan_amount":200000,"loan_term":12,"employment_status":"employed","employment_years":5.0,"age":35,"credit_history_score":800,"previous_delays":0,"loan_purpose":"personal"},
+            {"monthly_income":300000,"existing_debt":50000,"loan_amount":1500000,"loan_term":36,"employment_status":"employed","employment_years":4.0,"age":40,"credit_history_score":720,"previous_delays":0,"loan_purpose":"business"},
+            {"monthly_income":120000,"existing_debt":0,"loan_amount":500000,"loan_term":12,"employment_status":"self-employed","employment_years":3.0,"age":28,"credit_history_score":680,"previous_delays":0,"loan_purpose":"personal"},
+            {"monthly_income":180000,"existing_debt":20000,"loan_amount":300000,"loan_term":24,"employment_status":"part-time","employment_years":1.0,"age":30,"credit_history_score":520,"previous_delays":2,"loan_purpose":"auto"},
+            {"monthly_income":100000,"existing_debt":80000,"loan_amount":200000,"loan_term":12,"employment_status":"employed","employment_years":2.0,"age":45,"credit_history_score":600,"previous_delays":1,"loan_purpose":"personal"},
+            {"monthly_income":80000,"existing_debt":0,"loan_amount":100000,"loan_term":12,"employment_status":"retired","employment_years":20.0,"age":67,"credit_history_score":700,"previous_delays":0,"loan_purpose":"medical"},
+            {"monthly_income":40000,"existing_debt":0,"loan_amount":50000,"loan_term":6,"employment_status":"student","employment_years":0.0,"age":22,"credit_history_score":650,"previous_delays":0,"loan_purpose":"education"},
+            {"monthly_income":150000,"existing_debt":20000,"loan_amount":500000,"loan_term":24,"employment_status":"self-employed","employment_years":2.0,"age":34,"credit_history_score":610,"previous_delays":1,"loan_purpose":"business"},
+            {"monthly_income":60000,"existing_debt":10000,"loan_amount":1000000,"loan_term":48,"employment_status":"employed","employment_years":6.0,"age":50,"credit_history_score":640,"previous_delays":0,"loan_purpose":"mortgage"},
+            {"monthly_income":400000,"existing_debt":0,"loan_amount":200000,"loan_term":12,"employment_status":"employed","employment_years":8.0,"age":38,"credit_history_score":850,"previous_delays":0,"loan_purpose":"personal"},
+          ]
 
+          for i in range(to_create):
+            s = samples[i % len(samples)]
+            app = CreditApplication(
+              user_id=demo.id,
+              monthly_income=s["monthly_income"],
+              existing_debt=s["existing_debt"],
+              loan_amount=s["loan_amount"],
+              loan_term=s["loan_term"],
+              employment_status=s["employment_status"],
+              employment_years=s["employment_years"],
+              age=s["age"],
+              credit_history_score=s["credit_history_score"],
+              previous_delays=s["previous_delays"],
+              loan_purpose=s["loan_purpose"],
+              status="pending",
+            )
+            db.add(app)
+            db.commit()
+            db.refresh(app)
+
+            # Generate predictions and explanations
+            feats = extract_features(app)
+            dti = (app.existing_debt or 0) / max(app.monthly_income or 1, 1)
+            res = predict_all_models(models, feats, app.loan_amount or 0, dti, app.previous_delays or 0)
+            # Save predictions
+            for mname, pdata in res.items():
+              pr = PredictionResult(
+                application_id=app.id,
+                model_name=mname,
+                probability_default=pdata["probability_default"],
+                probability_delinquency=pdata.get("probability_delinquency", 0.0),
+                risk_level=pdata.get("risk_level", ""),
+                expected_credit_loss=pdata.get("expected_credit_loss", 0.0),
+                decision=pdata.get("decision", ""),
+              )
+              db.add(pr)
+            db.commit()
+
+            # Add explanations for ensemble prediction
+            ens_pr = db.query(PredictionResult).filter(
+              PredictionResult.application_id == app.id,
+              PredictionResult.model_name == "ensemble"
+            ).first()
+            if ens_pr:
+              expls = build_explanations(models, feats, feats[0].tolist())
+              for ex in expls:
+                fe = FeatureExplanation(
+                  prediction_id=ens_pr.id,
+                  feature_name=ex["feature_name"],
+                  feature_value=ex["feature_value"],
+                  effect_direction=ex["effect_direction"],
+                  importance_value=ex["importance_value"],
+                  explanation_text=ex["explanation_text"],
+                )
+                db.add(fe)
+              db.commit()
+          print("[Seed] Created demo applications and predictions.")
+    finally:
+      db.close()
 
 
 # TEMPLATES (embedded HTML — written to disk on startup)
